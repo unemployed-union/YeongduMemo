@@ -1,0 +1,18 @@
+packages:
+  - apps/*
+  - packages/*
+nodeLinker: hoisted
+packageExtensions:
+  '@expensify/react-native-live-markdown@0.1.371':
+    peerDependenciesMeta:
+      expensify-common:
+        optional: true
+allowBuilds:
+  argon2: true
+  better-sqlite3: false
+  esbuild: true
+patchedDependencies:
+  '@expensify/react-native-live-markdown@0.1.371': patches/@expensify__react-native-live-markdown@0.1.371.patch
+  expo-sqlite@58.0.15: patches/expo-sqlite@58.0.15.patch
+minimumReleaseAgeExclude:
+  - lucide-react-native@1.70.0

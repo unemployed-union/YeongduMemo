@@ -1,0 +1,33 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.4.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify
+      - run: pnpm format:check
+      - run: pnpm build
+      - run: pnpm --filter @yeongdu/server deploy --prod .artifacts/production
+      - run: node scripts/smoke-production.mjs .artifacts/production
+      - run: pnpm --filter @yeongdu/mobile exec expo install --check
+      - run: pnpm --filter @yeongdu/mobile exec expo export --platform all --output-dir dist --no-bytecode
+      - run: docker compose build
+      - run: docker compose up -d --wait
+      - run: curl --fail http://127.0.0.1:3000/health
+      - run: node scripts/smoke-docker.mjs
+      - if: always()
+        run: docker compose down

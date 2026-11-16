@@ -1,0 +1,339 @@
+diff --git a/android/src/main/java/com/expensify/livemarkdown/MarkdownFormatter.java b/android/src/main/java/com/expensify/livemarkdown/MarkdownFormatter.java
+index ffd3220da43ec816dbf25ec5ae9fc7ae47b78e15..34388867f3083053c0bad04fbc0091c500363b34 100644
+--- a/android/src/main/java/com/expensify/livemarkdown/MarkdownFormatter.java
++++ b/android/src/main/java/com/expensify/livemarkdown/MarkdownFormatter.java
+@@ -87,7 +87,11 @@ public class MarkdownFormatter {
+         setSpan(ssb, new MarkdownBackgroundSpan(markdownStyle.getMentionReportBackgroundColor(), markdownStyle.getMentionReportBorderRadius(), start, end), start, end);
+         break;
+       case "syntax":
+-        setSpan(ssb, new MarkdownForegroundColorSpan(markdownStyle.getSyntaxColor()), start, end);
++        if (markdownStyle.isSyntaxHidden()) {
++          setSpan(ssb, new MarkdownHiddenSyntaxSpan(), start, end);
++        } else {
++          setSpan(ssb, new MarkdownForegroundColorSpan(markdownStyle.getSyntaxColor()), start, end);
++        }
+         break;
+       case "link":
+         setSpan(ssb, new MarkdownUnderlineSpan(), start, end);
+diff --git a/android/src/main/java/com/expensify/livemarkdown/MarkdownStyle.java b/android/src/main/java/com/expensify/livemarkdown/MarkdownStyle.java
+index 34e9c632094016c8e6c76e75fcd462b955a1d5f9..e91b08d231eb5638abdac9a7eb6d15a55129b293 100644
+--- a/android/src/main/java/com/expensify/livemarkdown/MarkdownStyle.java
++++ b/android/src/main/java/com/expensify/livemarkdown/MarkdownStyle.java
+@@ -15,6 +15,7 @@ import java.util.Objects;
+ public class MarkdownStyle {
+   @ColorInt
+   private final int mSyntaxColor;
++  private final boolean mSyntaxHidden;
+ 
+   @ColorInt
+   private final int mLinkColor;
+@@ -85,6 +86,8 @@ public class MarkdownStyle {
+     float screenDensity = context.getResources().getDisplayMetrics().density;
+ 
+     mSyntaxColor = parseColor(map, "syntax", "color", context);
++    ReadableMap syntax = map.getMap("syntax");
++    mSyntaxHidden = syntax != null && syntax.hasKey("hidden") && syntax.getBoolean("hidden");
+     mLinkColor = parseColor(map, "link", "color", context);
+     mH1FontSize = parseFloat(map, "h1", "fontSize");
+     mEmojiFontSize = parseFloat(map, "emoji", "fontSize");
+@@ -144,6 +147,10 @@ public class MarkdownStyle {
+     return mSyntaxColor;
+   }
+ 
++  public boolean isSyntaxHidden() {
++    return mSyntaxHidden;
++  }
++
+   @ColorInt
+   public int getLinkColor() {
+     return mLinkColor;
+diff --git a/android/src/main/java/com/expensify/livemarkdown/spans/MarkdownHiddenSyntaxSpan.java b/android/src/main/java/com/expensify/livemarkdown/spans/MarkdownHiddenSyntaxSpan.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..edfd7959da04c56fc653a5b0b397e8e8c9079fc6
+--- /dev/null
++++ b/android/src/main/java/com/expensify/livemarkdown/spans/MarkdownHiddenSyntaxSpan.java
+@@ -0,0 +1,22 @@
++package com.expensify.livemarkdown.spans;
++
++import android.graphics.Canvas;
++import android.graphics.Paint;
++import android.text.style.ReplacementSpan;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++
++/** Hides formatting delimiters without mutating text, offsets, selection or composing spans. */
++public class MarkdownHiddenSyntaxSpan extends ReplacementSpan implements MarkdownSpan {
++  @Override
++  public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
++      @Nullable Paint.FontMetricsInt metrics) {
++    return 0;
++  }
++
++  @Override
++  public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end,
++      float x, int top, int y, int bottom, @NonNull Paint paint) {
++    // Delimiters stay in the source but occupy no painted space.
++  }
++}
+diff --git a/apple/MarkdownFormatter.mm b/apple/MarkdownFormatter.mm
+index 350653c5185d4a93cbcb6ce8d32f50090fa275fb..de0303a3aeb8dae9d77055ede6cd7cdccaa19a71 100644
+--- a/apple/MarkdownFormatter.mm
++++ b/apple/MarkdownFormatter.mm
+@@ -85,6 +85,12 @@
+ 
+   if (type == "syntax") {
+     [attributedString addAttribute:NSForegroundColorAttributeName value:markdownStyle.syntaxColor range:range];
++    if (markdownStyle.syntaxHidden) {
++      UIFont *font = [attributedString attribute:NSFontAttributeName atIndex:range.location effectiveRange:NULL];
++      [attributedString addAttribute:NSFontAttributeName value:[font fontWithSize:0.01] range:range];
++      [attributedString addAttribute:NSForegroundColorAttributeName value:UIColor.clearColor range:range];
++      [attributedString addAttribute:NSKernAttributeName value:@0 range:range];
++    }
+   } else if (type == "strikethrough") {
+     [attributedString addAttribute:NSStrikethroughStyleAttributeName value:[NSNumber numberWithInteger:NSUnderlineStyleSingle] range:range];
+   } else if (type == "code") {
+diff --git a/apple/RCTMarkdownStyle.h b/apple/RCTMarkdownStyle.h
+index f57fa41ae89381934069acc04e8b2ccd8509c54f..f64c72e1960794f53ee1be4c79e98ba6ee4d1844 100644
+--- a/apple/RCTMarkdownStyle.h
++++ b/apple/RCTMarkdownStyle.h
+@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
+ @interface RCTMarkdownStyle : NSObject
+ 
+ @property (nonatomic) UIColor *syntaxColor;
++@property (nonatomic) BOOL syntaxHidden;
+ @property (nonatomic) UIColor *linkColor;
+ @property (nonatomic) CGFloat h1FontSize;
+ @property (nonatomic) CGFloat emojiFontSize;
+diff --git a/apple/RCTMarkdownStyle.mm b/apple/RCTMarkdownStyle.mm
+index 4598d945c364076388d5a47c0aa2e5bad150df3c..0fa6cae8551796053b84d3310813946d8089c0c0 100644
+--- a/apple/RCTMarkdownStyle.mm
++++ b/apple/RCTMarkdownStyle.mm
+@@ -8,6 +8,7 @@
+ {
+   if (self = [super init]) {
+     _syntaxColor = RCTUIColorFromSharedColor(style.syntax.color);
++    _syntaxHidden = style.syntax.hidden;
+ 
+     _linkColor = RCTUIColorFromSharedColor(style.link.color);
+ 
+diff --git a/lib/commonjs/styleUtils.js b/lib/commonjs/styleUtils.js
+index 15bdee0de241725a1e3b280c0bd8229e7c9c5e79..9c69e6b956da7ed7a6a645ae5878e41938560959 100644
+--- a/lib/commonjs/styleUtils.js
++++ b/lib/commonjs/styleUtils.js
+@@ -18,7 +18,8 @@ const FONT_FAMILY_EMOJI = _reactNative.Platform.select({
+ function makeDefaultMarkdownStyle() {
+   return {
+     syntax: {
+-      color: 'gray'
++      color: 'gray',
++      hidden: false
+     },
+     link: {
+       color: 'blue'
+diff --git a/lib/module/styleUtils.js b/lib/module/styleUtils.js
+index 5e568f3c080b6d0058ea76fa7469a549f42e8443..eb2400342fb0e999199bc836f8313ea8ef7e85ce 100644
+--- a/lib/module/styleUtils.js
++++ b/lib/module/styleUtils.js
+@@ -13,7 +13,8 @@ const FONT_FAMILY_EMOJI = Platform.select({
+ function makeDefaultMarkdownStyle() {
+   return {
+     syntax: {
+-      color: 'gray'
++      color: 'gray',
++      hidden: false
+     },
+     link: {
+       color: 'blue'
+diff --git a/lib/typescript/src/MarkdownTextInputDecoratorViewNativeComponent.d.ts b/lib/typescript/src/MarkdownTextInputDecoratorViewNativeComponent.d.ts
+index 95231a8013d55fb67cb256c95284406e4167795a..c3e29389c93827eeb66908715afbf7c099fcdb51 100644
+--- a/lib/typescript/src/MarkdownTextInputDecoratorViewNativeComponent.d.ts
++++ b/lib/typescript/src/MarkdownTextInputDecoratorViewNativeComponent.d.ts
+@@ -16,6 +16,7 @@ interface CodeBlockStyle {
+ interface MarkdownStyle {
+     syntax: {
+         color: ColorValue;
++        hidden: boolean;
+     };
+     emoji: {
+         fontSize: Float;
+diff --git a/src/MarkdownTextInput.tsx b/src/MarkdownTextInput.tsx
+index 935b05548b3a8fea79ad719d75551a4d73a1af5b..46306f145981302deeb19f536b7e8e9e05ab1c15 100644
+--- a/src/MarkdownTextInput.tsx
++++ b/src/MarkdownTextInput.tsx
+@@ -38,23 +38,23 @@ function initializeLiveMarkdownIfNeeded() {
+   if (NativeLiveMarkdownModule) {
+     NativeLiveMarkdownModule.install();
+   }
+-  if (!global.jsi_setMarkdownRuntime) {
++  if (!globalThis.jsi_setMarkdownRuntime) {
+     throw new Error('[react-native-live-markdown] global.jsi_setMarkdownRuntime is not available');
+   }
+   workletRuntime = createWorkletRuntime({name: 'LiveMarkdownRuntime'});
+-  global.jsi_setMarkdownRuntime(workletRuntime);
++  globalThis.jsi_setMarkdownRuntime(workletRuntime);
+   initialized = true;
+ }
+ 
+ function registerParser(parser: (input: string) => MarkdownRange[]): number {
+   initializeLiveMarkdownIfNeeded();
+   const serializableWorklet = createSerializable(parser as WorkletFunction<[string], MarkdownRange[]>);
+-  const parserId = global.jsi_registerMarkdownWorklet(serializableWorklet);
++  const parserId = globalThis.jsi_registerMarkdownWorklet(serializableWorklet);
+   return parserId;
+ }
+ 
+ function unregisterParser(parserId: number) {
+-  global.jsi_unregisterMarkdownWorklet(parserId);
++  globalThis.jsi_unregisterMarkdownWorklet(parserId);
+ }
+ 
+ interface MarkdownTextInputProps extends TextInputProps, InlineImagesInputProps {
+@@ -68,7 +68,7 @@ type FormatSelectionResult = {
+   cursorOffset: number;
+ };
+ 
+-type MarkdownTextInput = TextInput & React.Component<MarkdownTextInputProps>;
++type MarkdownTextInput = React.ComponentRef<typeof TextInput>;
+ 
+ function processColorsInMarkdownStyle(input: MarkdownStyle): MarkdownStyle {
+   const output = JSON.parse(JSON.stringify(input));
+diff --git a/src/MarkdownTextInputDecoratorViewNativeComponent.ts b/src/MarkdownTextInputDecoratorViewNativeComponent.ts
+index 6b977626af9321e7c026d9816f3af5855cdadb5e..dda78348a579e3953165e78be4b3ac8fe659450b 100644
+--- a/src/MarkdownTextInputDecoratorViewNativeComponent.ts
++++ b/src/MarkdownTextInputDecoratorViewNativeComponent.ts
+@@ -1,90 +1,91 @@
+ import {codegenNativeComponent} from 'react-native';
+-import type {ColorValue, ViewProps} from 'react-native';
++import type {CodegenTypes, ColorValue, ViewProps} from 'react-native';
++
+ 
+-import type {Float, Int32} from 'react-native/Libraries/Types/CodegenTypes';
+ 
+ interface CodeBlockStyle {
+   fontFamily: string;
+-  fontSize: Float;
++  fontSize: CodegenTypes.Float;
+   color: ColorValue;
+   backgroundColor: ColorValue;
+   borderColor?: ColorValue;
+-  borderWidth?: Float;
+-  borderRadius?: Float;
++  borderWidth?: CodegenTypes.Float;
++  borderRadius?: CodegenTypes.Float;
+   borderStyle?: string;
+-  padding?: Float;
+-  paddingVertical?: Float;
+-  paddingHorizontal?: Float;
++  padding?: CodegenTypes.Float;
++  paddingVertical?: CodegenTypes.Float;
++  paddingHorizontal?: CodegenTypes.Float;
+ }
+ 
+ interface MarkdownStyle {
+   syntax: {
+     color: ColorValue;
++    hidden: boolean;
+   };
+   emoji: {
+-    fontSize: Float;
++    fontSize: CodegenTypes.Float;
+     fontFamily: string;
+   };
+   link: {
+     color: ColorValue;
+   };
+   h1: {
+-    fontSize: Float;
++    fontSize: CodegenTypes.Float;
+   };
+   blockquote: {
+     borderColor: ColorValue;
+-    borderWidth: Float;
+-    marginLeft: Float;
+-    paddingLeft: Float;
++    borderWidth: CodegenTypes.Float;
++    marginLeft: CodegenTypes.Float;
++    paddingLeft: CodegenTypes.Float;
+   };
+   code: CodeBlockStyle & {
+-    h1NestedFontSize?: Float;
++    h1NestedFontSize?: CodegenTypes.Float;
+   };
+   pre: CodeBlockStyle;
+   mentionHere: {
+     color: ColorValue;
+     backgroundColor: ColorValue;
+-    borderRadius?: Float;
++    borderRadius?: CodegenTypes.Float;
+   };
+   mentionUser: {
+     color: ColorValue;
+     backgroundColor: ColorValue;
+-    borderRadius?: Float;
++    borderRadius?: CodegenTypes.Float;
+   };
+   mentionReport: {
+     color: ColorValue;
+     backgroundColor: ColorValue;
+-    borderRadius?: Float;
++    borderRadius?: CodegenTypes.Float;
+   };
+   inlineImage: {
+-    minWidth: Float;
+-    minHeight: Float;
+-    maxWidth: Float;
+-    maxHeight: Float;
+-    marginTop: Float;
+-    marginBottom: Float;
+-    borderRadius: Float;
++    minWidth: CodegenTypes.Float;
++    minHeight: CodegenTypes.Float;
++    maxWidth: CodegenTypes.Float;
++    maxHeight: CodegenTypes.Float;
++    marginTop: CodegenTypes.Float;
++    marginBottom: CodegenTypes.Float;
++    borderRadius: CodegenTypes.Float;
+   };
+   loadingIndicatorContainer?: {
+     backgroundColor?: ColorValue;
+-    borderWidth?: Float;
++    borderWidth?: CodegenTypes.Float;
+     borderColor?: ColorValue;
+-    borderRadius?: Float;
+-    width?: Float;
+-    height?: Float;
++    borderRadius?: CodegenTypes.Float;
++    width?: CodegenTypes.Float;
++    height?: CodegenTypes.Float;
+   };
+   loadingIndicator?: {
+     primaryColor?: ColorValue;
+     secondaryColor?: ColorValue;
+-    width?: Float;
+-    height?: Float;
+-    borderWidth?: Float;
++    width?: CodegenTypes.Float;
++    height?: CodegenTypes.Float;
++    borderWidth?: CodegenTypes.Float;
+   };
+ }
+ 
+ interface NativeProps extends ViewProps {
+   markdownStyle: MarkdownStyle;
+-  parserId: Int32;
++  parserId: CodegenTypes.Int32;
+ }
+ 
+ export default codegenNativeComponent<NativeProps>('MarkdownTextInputDecoratorView', {
+diff --git a/src/styleUtils.ts b/src/styleUtils.ts
+index c97fd1e4ededbaf3eb30c04932d8a9feb721a71e..e683aa54c42131f9b3b6ca2decbde16df429baee 100644
+--- a/src/styleUtils.ts
++++ b/src/styleUtils.ts
+@@ -20,6 +20,7 @@ function makeDefaultMarkdownStyle(): MarkdownStyle {
+   return {
+     syntax: {
+       color: 'gray',
++      hidden: false,
+     },
+     link: {
+       color: 'blue',

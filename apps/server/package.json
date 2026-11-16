@@ -1,0 +1,35 @@
+{
+  "name": "@yeongdu/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
+    "user:create": "tsx --env-file-if-exists=../../.env src/cli.ts user:create",
+    "backup": "tsx --env-file-if-exists=../../.env src/cli.ts backup",
+    "backup:verify": "tsx --env-file-if-exists=../../.env src/cli.ts backup:verify",
+    "sync:renew-generation": "tsx --env-file-if-exists=../../.env src/cli.ts sync:renew-generation",
+    "e2ee:migrate": "tsx --env-file-if-exists=../../.env src/cli.ts e2ee:migrate",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1163.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@yeongdu/shared": "workspace:*",
+    "argon2": "^0.44.0",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.6.0",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0"
+  }
+}
